@@ -5,7 +5,7 @@ from ..networking import ConnectionInfo
 from .. import log
 import base64
 
-from requests.auth import HTTPDigestAuth
+
 
 LOG = log.getLogger("middlewares.digest_auth")
 
