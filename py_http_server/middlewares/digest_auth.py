@@ -25,7 +25,7 @@ class DigestAuthMiddleware(RequestHandlerABC):
         auth_type, _, data = header_value.partition(" ")
 
         # Enforce that authentication scheme must explicitly be "Basic"
-        if not data or auth_type != "Basic":
+        if not data or auth_type != "Digest":
             return False
 
         # Base64 decode payload string and split username:password credential pair
@@ -36,10 +36,10 @@ class DigestAuthMiddleware(RequestHandlerABC):
 
         # Check credential match against configured user directory
         if username in self.__cred and self.__cred[username] == password:
-            LOG.debug(f"Basic authentication correct credentials.")
+            LOG.debug(f"Digest authentication correct credentials.")
             return True
 
-        LOG.warning(f"Basic authentication incorrect credentials.")
+        LOG.warning(f"Digest authentication incorrect credentials.")
         return False
 
     def __call__(self, conn_info: ConnectionInfo, request: HTTPRequest):
@@ -56,6 +56,6 @@ class DigestAuthMiddleware(RequestHandlerABC):
 
         return self.http.status(
             401,
-            HeaderContainer({"WWW-Authenticate": 'Basic realm="auth", charset="UTF-8"'}),
+            HeaderContainer({"WWW-Authenticate": 'Digest realm="auth", charset="UTF-8"'}),
         )
 
