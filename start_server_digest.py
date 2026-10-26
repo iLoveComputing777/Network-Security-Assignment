@@ -31,7 +31,9 @@ def get_basic_auth_header(username: str, password: str) -> str:
 
 
 if __name__ == "__main__":
+
     try:
+
         # Get user inputs
         host = input("Enter host (e.g., example.com): ").strip()
         path = input("Enter path (e.g., /index.html): ").strip()
@@ -44,8 +46,8 @@ if __name__ == "__main__":
         # create the socket
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            # connect to the server
-            client_socket.connect(('127.0.0.1', 65432)) # <- IP and Port#
+            # connect to the server 65432
+            client_socket.connect(('127.0.0.1', 8080)) # <- IP and Port#
 
             request_lines = [
             
@@ -56,7 +58,7 @@ if __name__ == "__main__":
                 "Accept: */*",
             
                 get_basic_auth_header(username, password),
-                "Connection: close",
+                    "Connection: close",
             
                 "",  # Empty line to indicate end of headers
                 ""            
@@ -80,7 +82,6 @@ if __name__ == "__main__":
                 if not chunk:
                     break
                 response_chunks.append(chunk)
-
             response = b"".join(response_chunks).decode(errors="replace")
             print("=== HTTP Response ===")
             print(response)
@@ -93,36 +94,9 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\nOperation cancelled by user.")
         sys.exit(0)
-
-
-
-"""  def start_server():
-    # AF_INET = IPv4, SOCK_STREAM = TCP
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-        # bind to given IP and port
-        server_socket.bind(("127.0.0.1", 8080))
-
-        # start listening for connection requests
-        server_socket.listen()
-        print(f"Echo server listening on {"127.0.0.1"}:{8080}...")
-
-        # when a connection arrives, accept it and return details (accept blocks until connection arrives) 
-        conn, addr = server_socket.accept()
-        with conn:
-            print(f"Connected by {addr}")
-
-            # read / receive data through the connection (recv blocks until data received or connection closed)
-            data = conn.recv(1024)
-
-            # if data has been received
-            if data:
-                print(f"Received from client: {data.decode('utf-8')}")
                 
-                # Send the exact same data back
-                conn.sendall(data)
-                print("Echoed message back to client.")
 
-if __name__ == '__main__':
-    start_server()
 
-    ###""" 
+    
+
+

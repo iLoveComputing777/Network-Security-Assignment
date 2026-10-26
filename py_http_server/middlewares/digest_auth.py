@@ -12,9 +12,9 @@ LOG = log.getLogger("middlewares.digest_auth")
 
 class DigestAuthMiddleware(RequestHandlerABC):
   
-    def __init__(self, next: RequestHandler, credentials: dict[str, str]):
+    def __init__(self, next: RequestHandler, pwdfile: dict[str, str]):
         self.next = next
-        self.__cred = credentials
+        self.__cred = pwdfile
         self.http = HTTPResponseFactory(NO_CACHE_HEADERS)
        
 
@@ -44,11 +44,9 @@ class DigestAuthMiddleware(RequestHandlerABC):
 
     def __call__(self, conn_info: ConnectionInfo, request: HTTPRequest):
         
-        handler = DigestAuthMiddleware()
-        response = handler(conn_info, request)
+        """  handler = DigestAuthMiddleware()
+        response = handler(conn_info, request)"""
 
-        
-        
         if "Authorization" in request.headers and self.__verify_authorization(
             request.headers["Authorization"]
         ):
