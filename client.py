@@ -1,30 +1,49 @@
-# You must also provide a simple client that can retrieve the files and resources protected by the
-# authentication, requesting the username and password to the user. This should be implemented as
-# 'client.py' and 'client_subverted.py'. You can use modules and classes from the server to
-# help with HTTP parsing, but you cannot modify them (the server files)."
+""" Secure Digest Authentication Client """
+import urllib.request
+import urllib.error
+import hashlib
+import re
 
+def request_protected_resource(url):
+    """Attempt to access a resource, handling the Digest Auth challenge."""
+    try:
+        # Initial unauthenticated request
+        urllib.request.urlopen(url)
+    except urllib.error.HTTPError as e:
+        # Server responds with 401; intercept the WWW-Authenticate header
+        if e.code == 401:
+            auth_header = e.headers.get("WWW-Authenticate")
+            match = re.search(r'nonce="([^"]+)"', auth_header)
+            
+            if match:
+                nonce = match.group(1)
+                
+                # Request credentials from the user
+                username = input("Username: ")
+                password = input("Password: ")
 
-import socket
+                # Compute the required Digest response
+                pwd_hash = hashlib.sha256(password.encode()).hexdigest()
+                payload = (username + nonce + pwd_hash).encode()
+                response_hash = hashlib.sha256(payload).hexdigest()
 
-HOST = '127.0.0.1'
-PORT = 65432
+                # Build the authenticated request
+                req = urllib.request.Request(url)
+                digest_val = f'Digest username="{username}", nonce="{nonce}", response="{response_hash}"'
+                req.add_header("Authorization", digest_val)
 
-def start_client():
-    # AF_INET = IPv4, SOCK_STREAM = TCP
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-        # connect to IP and port
-        client_socket.connect((HOST, PORT))
-        
-        # send a simple hello message (that the server will return back to us)
-        message = "Hello, World!"
-        print(f"Sending: {message}")
-        client_socket.sendall(message.encode('utf-8'))
-        
-        # wait to receive the response
-        data = client_socket.recv(1024)
-        print(f"Received back: {data.decode('utf-8')}")
+                try:
+                    # Attempt retrieval of the page content
+                    resp = urllib.request.urlopen(req)
+                    print(f"Status Code: {resp.getcode()}") # R5: Show status code
+                    print(resp.read().decode())             # R5: Show page content
+                except urllib.error.HTTPError as err:
+                    print(f"Authentication Failed. Status Code: {err.code}")
+        else:
+            print(f"Unexpected HTTP Error: {e.code}")
+    except Exception as ex:
+        print(f"Connection Error: {ex}")
 
-if __name__ == '__main__':
-    start_client()
-
-
+if __name__ == "__main__":
+    target_url = input("Enter server URL (e.g., http://127.0.0.1:8080/): ")
+    request_protected_resource(target_url)

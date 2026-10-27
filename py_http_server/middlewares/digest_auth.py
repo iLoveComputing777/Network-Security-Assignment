@@ -1,59 +1,75 @@
-from ..common import RequestHandlerABC, RequestHandler, HeaderContainer, NO_CACHE_HEADERS
-from ..http.request import HTTPRequest
-from ..http.response import HTTPResponseFactory
-from ..networking import ConnectionInfo
-from .. import log
-import base64
+""" Secure Digest Authentication Middleware """
+import os
+import hashlib
+import hmac
+from py_http_server.http.response import HTTPResponse
+from py_http_server.http.response_body import ResponseBody
 
-
-
-LOG = log.getLogger("middlewares.digest_auth")
-
-
-class DigestAuthMiddleware(RequestHandlerABC):
-  
-    def __init__(self, next: RequestHandler, pwdfile: dict[str, str]):
+class DigestAuthMiddleware:
+    def __init__(self, next, pwdfile="passwords.txt"):
+        """Initialize the middleware and load the user database."""
         self.next = next
-        self.__cred = pwdfile
-        self.http = HTTPResponseFactory(NO_CACHE_HEADERS)
-       
+        self.pwdfile = pwdfile
+        self.passwords = self._load_passwords()
+        self.active_nonces = set()
 
-    def __verify_authorization(self, header_value: str):
-       
+    def _load_passwords(self):
+        """Parse passwords.txt into a dictionary of {username: sha256_hash}."""
+        creds = {}
+        try:
+            with open(self.pwdfile, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and ':' in line:
+                        user, pwd_hash = line.split(':', 1)
+                        creds[user] = pwd_hash
+        except FileNotFoundError:
+            pass
+        return creds
 
-        # Split header scheme and payload (e.g. "Basic dXNlcjpwYXNz")
-        auth_type, _, data = header_value.partition(" ")
-
-        # Enforce that authentication scheme must explicitly be "Basic"
-        if not data or auth_type != "Digest":
-            return False
-
-        # Base64 decode payload string and split username:password credential pair
-        # Format after decoding: "username:password"
-        username, _, password = (
-            base64.b64decode(data).decode("utf-8", "replace").partition(":")
-        )
-
-        # Check credential match against configured user directory
-        if username in self.__cred and self.__cred[username] == password:
-            LOG.debug(f"Digest authentication correct credentials.")
-            return True
-
-        LOG.warning(f"Digest authentication incorrect credentials.")
-        return False
-
-    def __call__(self, conn_info: ConnectionInfo, request: HTTPRequest):
+    def __call__(self, conn_info, request):
+        """Intercept the request and validate the Authorization header."""
+        auth_header = request.headers.get("Authorization", "")
         
-        """  handler = DigestAuthMiddleware()
-        response = handler(conn_info, request)"""
+        if not auth_header.startswith("Digest "):
+            return self._require_auth()
 
-        if "Authorization" in request.headers and self.__verify_authorization(
-            request.headers["Authorization"]
-        ):
+        auth_str = auth_header[7:]
+        auth_dict = {
+            k.strip(): v.strip(' "') 
+            for item in auth_str.split(",") 
+            if "=" in item for k, v in [item.split("=", 1)]
+        }
+
+        username = auth_dict.get("username")
+        nonce = auth_dict.get("nonce")
+        client_response = auth_dict.get("response")
+
+        if not all([username, nonce, client_response]):
+            return self._require_auth()
+
+        if username not in self.passwords or nonce not in self.active_nonces:
+            return self._require_auth()
+
+        stored_hash = self.passwords[username]
+        payload = (username + nonce + stored_hash).encode()
+        expected_response = hashlib.sha256(payload).hexdigest()
+
+        if hmac.compare_digest(expected_response, client_response):
+            self.active_nonces.remove(nonce)
+            # Pass both arguments to the next handler
             return self.next(conn_info, request)
+        else:
+            return self._require_auth()
 
-        return self.http.status(
-            401,
-            HeaderContainer({"WWW-Authenticate": 'Digest realm="auth", charset="UTF-8"'}),
-        )
-
+    def _require_auth(self):
+        """Generate a 401 response with a new server nonce."""
+        new_nonce = os.urandom(16).hex()
+        self.active_nonces.add(new_nonce)
+        headers = {
+            "WWW-Authenticate": f'Digest realm="Restricted Area", nonce="{new_nonce}"'
+        }
+        
+        # Use the static method to generate the body object from bytes
+        body = ResponseBody.from_bytes(b"401 Unauthorized")
+        return HTTPResponse(401, headers, body)
