@@ -2,6 +2,7 @@
 import os
 import hashlib
 import hmac
+import time
 from py_http_server.http.response import HTTPResponse
 from py_http_server.http.response_body import ResponseBody
 
@@ -12,6 +13,11 @@ class DigestAuthMiddleware:
         self.pwdfile = pwdfile
         self.passwords = self._load_passwords()
         self.active_nonces = set()
+
+        # Lockout mechanism parameters
+        self.failed_attempts = {}  # Format: {username: [timestamp1, timestamp2, ...]}
+        self.MAX_ATTEMPTS = 3      # Number of allowed failed attempts
+        self.LOCKOUT_WINDOW = 30   # Time window in seconds (e.g., locked out for 30s)
 
     def _load_passwords(self):
         """Parse passwords.txt into a dictionary of {username: sha256_hash}."""
@@ -26,6 +32,13 @@ class DigestAuthMiddleware:
         except FileNotFoundError:
             pass
         return creds
+
+    def _record_failure(self, username, current_time):
+        """Helper to record a failed attempt for a user."""
+        if username:
+            if username not in self.failed_attempts:
+                self.failed_attempts[username] = []
+            self.failed_attempts[username].append(current_time)
 
     def __call__(self, conn_info, request):
         """Intercept the request and validate the Authorization header."""
@@ -48,6 +61,20 @@ class DigestAuthMiddleware:
         if not all([username, nonce, client_response]):
             return self._require_auth()
 
+        current_time = time.time()
+
+        # --- Lockout Check ---
+        if username in self.failed_attempts:
+            # Clear old attempts outside the lockout window
+            self.failed_attempts[username] = [
+                t for t in self.failed_attempts[username] 
+                if current_time - t < self.LOCKOUT_WINDOW
+            ]
+            # If the user has reached the max attempts within the window, reject immediately
+            if len(self.failed_attempts[username]) >= self.MAX_ATTEMPTS:
+                print(f"[!] User '{username}' is temporarily locked out.")
+                return self._lockout_response()
+
         if username not in self.passwords or nonce not in self.active_nonces:
             return self._require_auth()
 
@@ -57,10 +84,21 @@ class DigestAuthMiddleware:
 
         if hmac.compare_digest(expected_response, client_response):
             self.active_nonces.remove(nonce)
-            # Pass both arguments to the next handler
+            # Successful login: reset failed attempts for this user
+            if username in self.failed_attempts:
+                del self.failed_attempts[username]
+            
             return self.next(conn_info, request)
         else:
+            # Incorrect password -> increment failure counter
+            self._record_failure(username, current_time)
             return self._require_auth()
+
+    def _lockout_response(self):
+        """Generate a 429 response when a user is locked out."""
+        headers = {"Retry-After": str(self.LOCKOUT_WINDOW)}
+        body = ResponseBody.from_bytes(b"429 Too Many Requests - Account temporarily locked")
+        return HTTPResponse(429, headers, body)
 
     def _require_auth(self):
         """Generate a 401 response with a new server nonce."""
