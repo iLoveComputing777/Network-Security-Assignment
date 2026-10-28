@@ -11090,14 +11090,12 @@ from py_http_server.http.response import HTTPResponse
 from py_http_server.http.response_body import ResponseBody
 class DigestAuthSubvertedMiddleware:
     def __init__(self, next, pwdfile="passwords.txt"):
-        """Initialize the middleware and load user credentials."""
         self.next = next
         self.pwdfile = pwdfile
         self.passwords = self._load_passwords()
         self.active_nonces = set()
         self.failed_counts = {}  
     def _load_passwords(self):
-        """Parse passwords database."""
         creds = {}
         try:
             with open(self.pwdfile, 'r') as f:
@@ -11110,7 +11108,6 @@ class DigestAuthSubvertedMiddleware:
             pass
         return creds
     def __call__(self, conn_info, request):
-        """Intercept and validate authorization headers."""
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Digest "):
             return self._require_auth()
@@ -11146,7 +11143,6 @@ class DigestAuthSubvertedMiddleware:
             else:
                 return self._require_auth()
     def _require_auth(self):
-        """Generate a 401 response with a new server nonce."""
         new_nonce = os.urandom(16).hex()
         self.active_nonces.add(new_nonce)
         headers = {
